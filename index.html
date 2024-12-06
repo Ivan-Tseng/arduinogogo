@@ -13,6 +13,8 @@
     <canvas id="myChart" width="400" height="200"></canvas>
 
     <script>
+        let chart; // 定義全局變量以存儲Chart實例
+
         document.getElementById('upload').addEventListener('change', handleFile, false);
 
         function handleFile(event) {
@@ -29,8 +31,8 @@
                 const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                 // 提取時間和數據值
-                const labels = jsonData.map(row => row['Timestamp']); // 假設時間列名為「時間」
-                const values = jsonData.map(row => row['EMG Value']); // 假設數據列名為「數據」
+                const labels = jsonData.map(row => row['Timestamp']); // 假設時間列名為「Timestamp」
+                const values = jsonData.map(row => row['EMG Value']); // 假設數據列名為「EMG Value」
 
                 // 繪製圖表
                 drawChart(labels, values);
@@ -41,7 +43,14 @@
 
         function drawChart(labels, values) {
             const ctx = document.getElementById('myChart').getContext('2d');
-            const chart = new Chart(ctx, {
+
+            // 如果chart存在，則銷毀它
+            if (chart) {
+                chart.destroy();
+            }
+
+            // 創建新的Chart實例
+            chart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
