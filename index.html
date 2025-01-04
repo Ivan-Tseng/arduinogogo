@@ -1,140 +1,177 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 EMG Data to Excel and Plot</title>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 EMG Data Visualization</title>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>ESP32 EMG Data</h1>
-    <button id="connectButton">Connect to ESP32</button>
-    <button id="saveButton" disabled>Save to Excel</button>
-    <div id="dataDisplay">Waiting for data...</div>
+  <h1>ESP32 EMG Data</h1>
+  
+  <!-- 實時繪圖功能 -->
+  <button id="connectButton">Connect to ESP32</button>
+  <button id="saveButton" disabled>Save to Excel</button>
+  <canvas id="emgChart" width="400" height="200"></canvas>
+  <div id="dataDisplay">Waiting for data...</div>
+  
+  <!-- 讀取 Excel 並繪圖功能 -->
+  <h2>Read and Plot from Excel</h2>
+  <input type="file" id="upload" accept=".xlsx, .xls" />
+  <canvas id="excelChart" width="400" height="200"></canvas>
+  
+  <script>
+    let characteristic;
+    let dataArray = []; // 儲存實時數據的陣列
+    let liveChart, excelChart; // 實時圖表和 Excel 圖表
+    const maxDataPoints = 50; // 實時圖表上的最大數據點
 
-    <h2>從Excel文件繪製圖表</h2>
-    <input type="file" id="upload" accept=".xlsx, .xls" />
-    <canvas id="myChart" width="400" height="200"></canvas>
+    // 連接 ESP32 並初始化實時圖表
+    async function connectToESP32() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 的 Service UUID
+        });
 
-    <script>
-        let characteristic;
-        let dataArray = []; // 儲存數據的陣列
-        let chart; // 定義全局變量以存儲Chart實例
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+        characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
 
-        async function connectToESP32() {
-            try {
-                const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // 你的 Service UUID
-                });
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleData);
 
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-                characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+        document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
+        document.getElementById('saveButton').disabled = false;
 
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', handleData);
+        initializeLiveChart(); // 初始化實時圖表
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('dataDisplay').innerText = "Connection failed.";
+      }
+    }
 
-                document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
-                document.getElementById('saveButton').disabled = false; // 啟用保存按鈕
-            } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('dataDisplay').innerText = "Connection failed.";
+    // 處理接收到的實時數據
+    function handleData(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      const timestamp = new Date().toLocaleTimeString(); // 簡化版的時間戳
+
+      dataArray.push({ timestamp, value: parseInt(value, 10) });
+
+      // 限制數據陣列的大小
+      if (dataArray.length > maxDataPoints) {
+        dataArray.shift();
+      }
+
+      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
+      updateLiveChart(); // 更新實時圖表
+    }
+
+    // 保存數據到 Excel
+    function saveToExcel() {
+      const worksheet = XLSX.utils.json_to_sheet(dataArray);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "EMG_Data");
+      XLSX.writeFile(workbook, "EMG_Data.xlsx");
+    }
+
+    // 初始化實時圖表
+    function initializeLiveChart() {
+      const ctx = document.getElementById('emgChart').getContext('2d');
+      liveChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Real-time EMG Value',
+            data: [],
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              title: { display: true, text: 'Time' }
+            },
+            y: {
+              title: { display: true, text: 'EMG Value' }
             }
+          }
         }
+      });
+    }
 
-        function handleData(event) {
-            const value = new TextDecoder().decode(event.target.value); // 解碼數據
-            const timestamp = new Date().toISOString(); // 獲取時間戳
+    // 更新實時圖表
+    function updateLiveChart() {
+      const labels = dataArray.map(item => item.timestamp);
+      const values = dataArray.map(item => item.value);
 
-            // 添加數據到陣列
-            dataArray.push({ timestamp, value });
+      liveChart.data.labels = labels;
+      liveChart.data.datasets[0].data = values;
+      liveChart.update();
+    }
 
-            document.getElementById('dataDisplay').innerText = `Received: ${value}`;
-        }
+    // 讀取 Excel 並初始化圖表
+    document.getElementById('upload').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
 
-        function saveToExcel() {
-            // 將數據轉換為工作表格式
-            const worksheet = XLSX.utils.json_to_sheet(dataArray);
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
 
-            // 創建工作簿
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "EMG_Data");
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-            // 將工作簿保存為檔案
-            XLSX.writeFile(workbook, "EMG_Data.xlsx");
-        }
+        const labels = jsonData.map(row => row['timestamp'] || row['Timestamp']);
+        const values = jsonData.map(row => row['value'] || row['Value'] || row['EMG Value']);
 
-        // 讀取Excel並繪製圖表
-        document.getElementById('upload').addEventListener('change', handleFile, false);
+        drawExcelChart(labels, values);
+      };
 
-        function handleFile(event) {
-            const file = event.target.files[0];
-            const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+    });
 
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
+    // 繪製 Excel 數據圖表
+    function drawExcelChart(labels, values) {
+      const ctx = document.getElementById('excelChart').getContext('2d');
 
-                // 假設數據在第一個工作表
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet);
+      // 如果已經有圖表，則銷毀舊的
+      if (excelChart) {
+        excelChart.destroy();
+      }
 
-                // 提取時間和數據值
-                const labels = jsonData.map(row => row['Timestamp']); // 假設時間列名為「timestamp」
-                const values = jsonData.map(row => row['EMG Value']); // 假設數據列名為「value」
-
-                // 繪製圖表
-                drawChart(labels, values);
-            };
-
-            reader.readAsArrayBuffer(file);
-        }
-
-        function drawChart(labels, values) {
-            const ctx = document.getElementById('myChart').getContext('2d');
-
-            // 如果chart存在，則銷毀它
-            if (chart) {
-                chart.destroy();
+      excelChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'EMG Value from Excel',
+            data: values,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              title: { display: true, text: 'Time' }
+            },
+            y: {
+              title: { display: true, text: 'EMG Value' }
             }
-
-            // 創建新的Chart實例
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'EMG Data',
-                        data: values,
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 2,
-                        fill: false
-                    }]
-                },
-                options: {
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: '時間'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: '數據值'
-                            }
-                        }
-                    }
-                }
-            });
+          }
         }
+      });
+    }
 
-        document.getElementById('connectButton').addEventListener('click', connectToESP32);
-        document.getElementById('saveButton').addEventListener('click', saveToExcel);
-    </script>
+    document.getElementById('connectButton').addEventListener('click', connectToESP32);
+    document.getElementById('saveButton').addEventListener('click', saveToExcel);
+  </script>
 </body>
 </html>
