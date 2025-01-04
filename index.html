@@ -83,8 +83,8 @@
                 const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                 // 提取時間和數據值
-                const labels = jsonData.map(row => row['timestamp']); // 假設時間列名為「timestamp」
-                const values = jsonData.map(row => row['value']); // 假設數據列名為「value」
+                const labels = jsonData.map(row => row['Timestamp']); // 假設時間列名為「timestamp」
+                const values = jsonData.map(row => row['EMG Value']); // 假設數據列名為「value」
 
                 // 繪製圖表
                 drawChart(labels, values);
