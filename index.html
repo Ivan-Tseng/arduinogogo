@@ -3,18 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>從Excel讀取數據並繪圖</title>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <title>ESP32 EMG Data to Excel and Plot</title>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>從Excel文件繪製圖表</h1>
+    <h1>ESP32 EMG Data</h1>
+    <button id="connectButton">Connect to ESP32</button>
+    <button id="saveButton" disabled>Save to Excel</button>
+    <div id="dataDisplay">Waiting for data...</div>
+
+    <h2>從Excel文件繪製圖表</h2>
     <input type="file" id="upload" accept=".xlsx, .xls" />
     <canvas id="myChart" width="400" height="200"></canvas>
 
     <script>
+        let characteristic;
+        let dataArray = []; // 儲存數據的陣列
         let chart; // 定義全局變量以存儲Chart實例
 
+        async function connectToESP32() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // 你的 Service UUID
+                });
+
+                const server = await device.gatt.connect();
+                const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+                characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleData);
+
+                document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
+                document.getElementById('saveButton').disabled = false; // 啟用保存按鈕
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('dataDisplay').innerText = "Connection failed.";
+            }
+        }
+
+        function handleData(event) {
+            const value = new TextDecoder().decode(event.target.value); // 解碼數據
+            const timestamp = new Date().toISOString(); // 獲取時間戳
+
+            // 添加數據到陣列
+            dataArray.push({ timestamp, value });
+
+            document.getElementById('dataDisplay').innerText = `Received: ${value}`;
+        }
+
+        function saveToExcel() {
+            // 將數據轉換為工作表格式
+            const worksheet = XLSX.utils.json_to_sheet(dataArray);
+
+            // 創建工作簿
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "EMG_Data");
+
+            // 將工作簿保存為檔案
+            XLSX.writeFile(workbook, "EMG_Data.xlsx");
+        }
+
+        // 讀取Excel並繪製圖表
         document.getElementById('upload').addEventListener('change', handleFile, false);
 
         function handleFile(event) {
@@ -31,8 +83,8 @@
                 const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                 // 提取時間和數據值
-                const labels = jsonData.map(row => row['Timestamp']); // 假設時間列名為「Timestamp」
-                const values = jsonData.map(row => row['EMG Value']); // 假設數據列名為「EMG Value」
+                const labels = jsonData.map(row => row['timestamp']); // 假設時間列名為「timestamp」
+                const values = jsonData.map(row => row['value']); // 假設數據列名為「value」
 
                 // 繪製圖表
                 drawChart(labels, values);
@@ -55,7 +107,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: '數據值',
+                        label: 'EMG Data',
                         data: values,
                         borderColor: 'rgba(75, 192, 192, 1)',
                         borderWidth: 2,
@@ -80,6 +132,9 @@
                 }
             });
         }
+
+        document.getElementById('connectButton').addEventListener('click', connectToESP32);
+        document.getElementById('saveButton').addEventListener('click', saveToExcel);
     </script>
 </body>
 </html>
