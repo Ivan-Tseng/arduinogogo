@@ -10,7 +10,7 @@
 <body>
   <h1>ESP32 EMG Data</h1>
 
-  <!-- 實時繪圖功能 -->
+  <!-- Real-time plotting functionality -->
   <button id="connectButton">Connect to ESP32</button>
   <button id="stopButton" disabled>Stop</button>
   <button id="continueButton" disabled>Continue</button>
@@ -19,24 +19,24 @@
   <canvas id="emgChart" width="400" height="200"></canvas>
   <div id="dataDisplay">Waiting for data...</div>
 
-  <!-- 讀取 Excel 並繪圖功能 -->
+  <!-- Read Excel and plot functionality -->
   <h2>Read and Plot from Excel</h2>
   <input type="file" id="upload" accept=".xlsx, .xls" />
   <canvas id="excelChart" width="400" height="200"></canvas>
 
   <script>
     let characteristic;
-    let dataArray = []; // 儲存實時數據的陣列
-    let liveChart, excelChart; // 實時圖表和 Excel 圖表
-    const maxDataPoints = 50; // 實時圖表上的最大數據點
-    let receivingData = true; // 用於控制是否接收數據
+    let dataArray = []; // Array to store real-time data
+    let liveChart, excelChart; // Real-time chart and Excel chart
+    const maxDataPoints = 50; // Maximum data points in real-time chart
+    let receivingData = true; // Control whether data is being received
 
-    // 連接 ESP32 並初始化實時圖表
+    // Connect to ESP32 and initialize real-time chart
     async function connectToESP32() {
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 的 Service UUID
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 Service UUID
         });
 
         const server = await device.gatt.connect();
@@ -51,47 +51,46 @@
         document.getElementById('stopButton').disabled = false;
         document.getElementById('endButton').disabled = false;
 
-        initializeLiveChart(); // 初始化實時圖表
+        initializeLiveChart(); // Initialize real-time chart
       } catch (error) {
         console.error('Error:', error);
         document.getElementById('dataDisplay').innerText = "Connection failed.";
       }
     }
 
-    // 處理接收到的實時數據
+    // Handle incoming real-time data
     function handleData(event) {
-      if (!receivingData) return; // 如果停止接收，直接返回
+      if (!receivingData) return; // If not receiving, return immediately
 
       const value = new TextDecoder().decode(event.target.value);
-      const mappedValue = mapValue(parseInt(value, 10), 0, 4096, 48, 9.6e8);
-      const timestamp = new Date().toLocaleTimeString(); // 簡化版的時間戳
+      const timestamp = new Date().toLocaleTimeString(); // Simplified timestamp
 
-      dataArray.push({ timestamp, value: mappedValue });
+      dataArray.push({ timestamp, value: parseInt(value, 10) });
 
-      // 限制數據陣列的大小
+      // Limit the size of the data array
       if (dataArray.length > maxDataPoints) {
         dataArray.shift();
       }
 
-      document.getElementById('dataDisplay').innerText = `Received: ${value} (Mapped: ${mappedValue})`;
-      updateLiveChart(); // 更新實時圖表
+      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
+      updateLiveChart(); // Update real-time chart
     }
 
-    // 停止接收數據
+    // Stop receiving data
     function stopReceivingData() {
       receivingData = false;
       document.getElementById('stopButton').disabled = true;
       document.getElementById('continueButton').disabled = false;
     }
 
-    // 繼續接收數據
+    // Continue receiving data
     function continueReceivingData() {
       receivingData = true;
       document.getElementById('stopButton').disabled = false;
       document.getElementById('continueButton').disabled = true;
     }
 
-    // 結束接收數據並斷開連接
+    // End receiving data and disconnect
     async function endReceivingData() {
       try {
         if (characteristic) {
@@ -104,7 +103,7 @@
         document.getElementById('endButton').disabled = true;
         document.getElementById('connectButton').disabled = false;
 
-        // 重置數據和圖表
+        // Reset data and chart
         dataArray = [];
         if (liveChart) {
           liveChart.data.labels = [];
@@ -112,7 +111,7 @@
           liveChart.update();
         }
 
-        // 刷新藍牙設備以保證可重新連接
+        // Refresh Bluetooth device to ensure reconnection is possible
         if (navigator.bluetooth) {
           await navigator.bluetooth.getAvailability();
         }
@@ -121,7 +120,7 @@
       }
     }
 
-    // 保存數據到 Excel
+    // Save data to Excel
     function saveToExcel() {
       const worksheet = XLSX.utils.json_to_sheet(dataArray);
       const workbook = XLSX.utils.book_new();
@@ -129,7 +128,7 @@
       XLSX.writeFile(workbook, "EMG_Data.xlsx");
     }
 
-    // 初始化實時圖表
+    // Initialize real-time chart
     function initializeLiveChart() {
       const ctx = document.getElementById('emgChart').getContext('2d');
       liveChart = new Chart(ctx, {
@@ -157,7 +156,7 @@
       });
     }
 
-    // 更新實時圖表
+    // Update real-time chart
     function updateLiveChart() {
       const labels = dataArray.map(item => item.timestamp);
       const values = dataArray.map(item => item.value);
@@ -167,12 +166,7 @@
       liveChart.update();
     }
 
-    // 映射值的函數
-    function mapValue(value, inMin, inMax, outMin, outMax) {
-      return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
-    }
-
-    // 讀取 Excel 並初始化圖表
+    // Read Excel and initialize chart
     document.getElementById('upload').addEventListener('change', function(event) {
       const file = event.target.files[0];
       const reader = new FileReader();
@@ -194,11 +188,11 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // 繪製 Excel 數據圖表
+    // Draw Excel data chart
     function drawExcelChart(labels, values) {
       const ctx = document.getElementById('excelChart').getContext('2d');
 
-      // 如果已經有圖表，則銷毀舊的
+      // Destroy the old chart if it exists
       if (excelChart) {
         excelChart.destroy();
       }
