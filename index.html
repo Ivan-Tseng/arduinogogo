@@ -9,23 +9,27 @@
 </head>
 <body>
   <h1>ESP32 EMG Data</h1>
-  
+
   <!-- 實時繪圖功能 -->
   <button id="connectButton">Connect to ESP32</button>
+  <button id="stopButton" disabled>Stop</button>
+  <button id="continueButton" disabled>Continue</button>
+  <button id="endButton" disabled>End</button>
   <button id="saveButton" disabled>Save to Excel</button>
   <canvas id="emgChart" width="400" height="200"></canvas>
   <div id="dataDisplay">Waiting for data...</div>
-  
+
   <!-- 讀取 Excel 並繪圖功能 -->
   <h2>Read and Plot from Excel</h2>
   <input type="file" id="upload" accept=".xlsx, .xls" />
   <canvas id="excelChart" width="400" height="200"></canvas>
-  
+
   <script>
     let characteristic;
     let dataArray = []; // 儲存實時數據的陣列
     let liveChart, excelChart; // 實時圖表和 Excel 圖表
     const maxDataPoints = 50; // 實時圖表上的最大數據點
+    let receivingData = true; // 用於控制是否接收數據
 
     // 連接 ESP32 並初始化實時圖表
     async function connectToESP32() {
@@ -44,6 +48,8 @@
 
         document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
         document.getElementById('saveButton').disabled = false;
+        document.getElementById('stopButton').disabled = false;
+        document.getElementById('endButton').disabled = false;
 
         initializeLiveChart(); // 初始化實時圖表
       } catch (error) {
@@ -54,18 +60,65 @@
 
     // 處理接收到的實時數據
     function handleData(event) {
+      if (!receivingData) return; // 如果停止接收，直接返回
+
       const value = new TextDecoder().decode(event.target.value);
+      const mappedValue = mapValue(parseInt(value, 10), 0, 4096, 48, 9.6e8);
       const timestamp = new Date().toLocaleTimeString(); // 簡化版的時間戳
 
-      dataArray.push({ timestamp, value: parseInt(value, 10) });
+      dataArray.push({ timestamp, value: mappedValue });
 
       // 限制數據陣列的大小
       if (dataArray.length > maxDataPoints) {
         dataArray.shift();
       }
 
-      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
+      document.getElementById('dataDisplay').innerText = `Received: ${value} (Mapped: ${mappedValue})`;
       updateLiveChart(); // 更新實時圖表
+    }
+
+    // 停止接收數據
+    function stopReceivingData() {
+      receivingData = false;
+      document.getElementById('stopButton').disabled = true;
+      document.getElementById('continueButton').disabled = false;
+    }
+
+    // 繼續接收數據
+    function continueReceivingData() {
+      receivingData = true;
+      document.getElementById('stopButton').disabled = false;
+      document.getElementById('continueButton').disabled = true;
+    }
+
+    // 結束接收數據並斷開連接
+    async function endReceivingData() {
+      try {
+        if (characteristic) {
+          await characteristic.stopNotifications();
+          characteristic.removeEventListener('characteristicvaluechanged', handleData);
+        }
+        document.getElementById('dataDisplay').innerText = "Connection ended. Refreshing...";
+        document.getElementById('stopButton').disabled = true;
+        document.getElementById('continueButton').disabled = true;
+        document.getElementById('endButton').disabled = true;
+        document.getElementById('connectButton').disabled = false;
+
+        // 重置數據和圖表
+        dataArray = [];
+        if (liveChart) {
+          liveChart.data.labels = [];
+          liveChart.data.datasets[0].data = [];
+          liveChart.update();
+        }
+
+        // 刷新藍牙設備以保證可重新連接
+        if (navigator.bluetooth) {
+          await navigator.bluetooth.getAvailability();
+        }
+      } catch (error) {
+        console.error('Error while ending connection:', error);
+      }
     }
 
     // 保存數據到 Excel
@@ -112,6 +165,11 @@
       liveChart.data.labels = labels;
       liveChart.data.datasets[0].data = values;
       liveChart.update();
+    }
+
+    // 映射值的函數
+    function mapValue(value, inMin, inMax, outMin, outMax) {
+      return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
     }
 
     // 讀取 Excel 並初始化圖表
@@ -171,6 +229,9 @@
     }
 
     document.getElementById('connectButton').addEventListener('click', connectToESP32);
+    document.getElementById('stopButton').addEventListener('click', stopReceivingData);
+    document.getElementById('continueButton').addEventListener('click', continueReceivingData);
+    document.getElementById('endButton').addEventListener('click', endReceivingData);
     document.getElementById('saveButton').addEventListener('click', saveToExcel);
   </script>
 </body>
