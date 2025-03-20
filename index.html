@@ -10,12 +10,14 @@
 <body>
   <h1>ESP32 EMG Data</h1>
 
-  <!-- 連接ESP32和控制的按鈕 -->
+  <!-- 控制馬達的按鈕 -->
   <button id="connectButton">Connect to ESP32</button>
   <button id="stopButton" disabled>Stop</button>
   <button id="continueButton" disabled>Continue</button>
   <button id="endButton" disabled>End</button>
   <button id="saveButton" disabled>Save to CSV</button>
+  <button id="motorForwardButton">Motor Forward for 1 second</button>
+  <button id="motorReverseButton">Motor Reverse for 1 second</button>
   <canvas id="emgChart" width="400" height="200"></canvas>
   <div id="dataDisplay">Waiting for data...</div>
 
@@ -173,6 +175,32 @@
       liveChart.update();
     }
 
+    // 控制馬達正轉1秒鐘
+    function motorForward() {
+      // 這裡應該發送控制命令給ESP32使其控制馬達正轉
+      console.log("Motor Forward for 1 second");
+      // 假設這裡是與ESP32通信的代碼，將馬達設置為正轉
+      // 例如：sendMotorCommand('forward');
+      setTimeout(() => {
+        // 停止馬達
+        console.log("Motor Stopped");
+        // sendMotorCommand('stop');
+      }, 1000);
+    }
+
+    // 控制馬達反轉1秒鐘
+    function motorReverse() {
+      // 這裡應該發送控制命令給ESP32使其控制馬達反轉
+      console.log("Motor Reverse for 1 second");
+      // 假設這裡是與ESP32通信的代碼，將馬達設置為反轉
+      // 例如：sendMotorCommand('reverse');
+      setTimeout(() => {
+        // 停止馬達
+        console.log("Motor Stopped");
+        // sendMotorCommand('stop');
+      }, 1000);
+    }
+
     // 讀取Excel並初始化圖表
     document.getElementById('upload').addEventListener('change', function(event) {
       const file = event.target.files[0];
@@ -209,9 +237,9 @@
         data: {
           labels: labels,
           datasets: [{
-            label: 'EMG Value from Excel',
+            label: 'Excel Data EMG Value',
             data: values,
-            borderColor: 'rgba(255, 99, 132, 1)',
+            borderColor: 'rgba(54, 162, 235, 1)',
             borderWidth: 2,
             fill: false
           }]
@@ -229,12 +257,14 @@
       });
     }
 
-    // 按鈕事件
+    // 事件綁定
     document.getElementById('connectButton').addEventListener('click', connectToESP32);
     document.getElementById('stopButton').addEventListener('click', stopReceivingData);
     document.getElementById('continueButton').addEventListener('click', continueReceivingData);
     document.getElementById('endButton').addEventListener('click', endReceivingData);
-    document.getElementById('saveButton').addEventListener('click', saveToCSV); // 保存為CSV
+    document.getElementById('saveButton').addEventListener('click', saveToCSV);
+    document.getElementById('motorForwardButton').addEventListener('click', motorForward);
+    document.getElementById('motorReverseButton').addEventListener('click', motorReverse);
   </script>
 </body>
 </html>
