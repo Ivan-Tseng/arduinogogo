@@ -32,6 +32,7 @@
     let liveChart, excelChart; // 即時圖表和Excel圖表
     const maxDataPoints = 50; // 即時圖表中的最大數據點
     let receivingData = true; // 控制是否正在接收數據
+    let motorControlEnabled = false; // 控制馬達操作的標誌
 
     // 連接到ESP32並初始化即時圖表
     async function connectToESP32() {
@@ -177,27 +178,21 @@
 
     // 控制馬達正轉1秒鐘
     function motorForward() {
-      // 這裡應該發送控制命令給ESP32使其控制馬達正轉
+      if (!motorControlEnabled) return;
+
       console.log("Motor Forward for 1 second");
-      // 假設這裡是與ESP32通信的代碼，將馬達設置為正轉
-      // 例如：sendMotorCommand('forward');
       setTimeout(() => {
-        // 停止馬達
         console.log("Motor Stopped");
-        // sendMotorCommand('stop');
       }, 1000);
     }
 
     // 控制馬達反轉1秒鐘
     function motorReverse() {
-      // 這裡應該發送控制命令給ESP32使其控制馬達反轉
+      if (!motorControlEnabled) return;
+
       console.log("Motor Reverse for 1 second");
-      // 假設這裡是與ESP32通信的代碼，將馬達設置為反轉
-      // 例如：sendMotorCommand('reverse');
       setTimeout(() => {
-        // 停止馬達
         console.log("Motor Stopped");
-        // sendMotorCommand('stop');
       }, 1000);
     }
 
@@ -227,7 +222,6 @@
     function drawExcelChart(labels, values) {
       const ctx = document.getElementById('excelChart').getContext('2d');
 
-      // 如果存在舊圖表，則銷毀
       if (excelChart) {
         excelChart.destroy();
       }
