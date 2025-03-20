@@ -55,6 +55,7 @@
         document.getElementById('endButton').disabled = false;
 
         initializeLiveChart(); // 初始化即時圖表
+        motorControlEnabled = true; // 啟用馬達控制
       } catch (error) {
         console.error('Error:', error);
         document.getElementById('dataDisplay').innerText = "Connection failed.";
