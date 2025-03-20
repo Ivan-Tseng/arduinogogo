@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 EMG Data Visualization</title>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <h1>ESP32 EMG Data</h1>
+
+  <!-- Real-time plotting functionality -->
+  <button id="connectButton">Connect to ESP32</button>
+  <button id="stopButton" disabled>Stop</button>
+  <button id="continueButton" disabled>Continue</button>
+  <button id="endButton" disabled>End</button>
+  <button id="saveButton" disabled>Save to Excel</button>
+  <canvas id="emgChart" width="400" height="200"></canvas>
+  <div id="dataDisplay">Waiting for data...</div>
+
+  <!-- Read Excel and plot functionality -->
+  <h2>Read and Plot from Excel</h2>
+  <input type="file" id="upload" accept=".xlsx, .xls" />
+  <canvas id="excelChart" width="400" height="200"></canvas>
+
+  <script>
+    let characteristic;
+    let dataArray = []; // Array to store real-time data
+    let liveChart, excelChart; // Real-time chart and Excel chart
+    const maxDataPoints = 50; // Maximum data points in real-time chart
+    let receivingData = true; // Control whether data is being received
+
+    // Connect to ESP32 and initialize real-time chart
+    async function connectToESP32() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 Service UUID
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+        characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleData);
+
+        document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
+        document.getElementById('saveButton').disabled = false;
+        document.getElementById('stopButton').disabled = false;
+        document.getElementById('endButton').disabled = false;
+
+        initializeLiveChart(); // Initialize real-time chart
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('dataDisplay').innerText = "Connection failed.";
+      }
+    }
+
+    // Handle incoming real-time data
+    function handleData(event) {
+      if (!receivingData) return; // If not receiving, return immediately
+
+      const value = new TextDecoder().decode(event.target.value);
+      const timestamp = new Date().toLocaleTimeString(); // Simplified timestamp
+
+      dataArray.push({ timestamp, value: parseInt(value, 10) });
+
+      // Limit the size of the data array
+      if (dataArray.length > maxDataPoints) {
+        dataArray.shift();
+      }
+
+      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
+      updateLiveChart(); // Update real-time chart
+    }
+
+    // Stop receiving data
+    function stopReceivingData() {
+      receivingData = false;
+      document.getElementById('stopButton').disabled = true;
+      document.getElementById('continueButton').disabled = false;
+    }
+
+    // Continue receiving data
+    function continueReceivingData() {
+      receivingData = true;
+      document.getElementById('stopButton').disabled = false;
+      document.getElementById('continueButton').disabled = true;
+    }
+
+    // End receiving data and disconnect
+    async function endReceivingData() {
+      try {
+        if (characteristic) {
+          await characteristic.stopNotifications();
+          characteristic.removeEventListener('characteristicvaluechanged', handleData);
+        }
+        document.getElementById('dataDisplay').innerText = "Connection ended. Refreshing...";
+        document.getElementById('stopButton').disabled = true;
+        document.getElementById('continueButton').disabled = true;
+        document.getElementById('endButton').disabled = true;
+        document.getElementById('connectButton').disabled = false;
+
+        // Reset data and chart
+        dataArray = [];
+        if (liveChart) {
+          liveChart.data.labels = [];
+          liveChart.data.datasets[0].data = [];
+          liveChart.update();
+        }
+
+        // Refresh Bluetooth device to ensure reconnection is possible
+        if (navigator.bluetooth) {
+          await navigator.bluetooth.getAvailability();
+        }
+      } catch (error) {
+        console.error('Error while ending connection:', error);
+      }
+    }
+
+    // Save data to Excel
+    function saveToExcel() {
+      const worksheet = XLSX.utils.json_to_sheet(dataArray);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "EMG_Data");
+      XLSX.writeFile(workbook, "EMG_Data.xlsx");
+    }
+
+    // Initialize real-time chart
+    function initializeLiveChart() {
+      const ctx = document.getElementById('emgChart').getContext('2d');
+      liveChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Real-time EMG Value',
+            data: [],
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              title: { display: true, text: 'Time' }
+            },
+            y: {
+              title: { display: true, text: 'EMG Value' }
+            }
+          }
+        }
+      });
+    }
+
+    // Update real-time chart
+    function updateLiveChart() {
+      const labels = dataArray.map(item => item.timestamp);
+      const values = dataArray.map(item => item.value);
+
+      liveChart.data.labels = labels;
+      liveChart.data.datasets[0].data = values;
+      liveChart.update();
+    }
+
+    // Read Excel and initialize chart
+    document.getElementById('upload').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+        const labels = jsonData.map(row => row['timestamp'] || row['Timestamp']);
+        const values = jsonData.map(row => row['value'] || row['Value'] || row['EMG Value']);
+
+        drawExcelChart(labels, values);
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Draw Excel data chart
+    function drawExcelChart(labels, values) {
+      const ctx = document.getElementById('excelChart').getContext('2d');
+
+      // Destroy the old chart if it exists
+      if (excelChart) {
+        excelChart.destroy();
+      }
+
+      excelChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'EMG Value from Excel',
+            data: values,
+            borderColor: 'rgba(255, 99, 132, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              title: { display: true, text: 'Time' }
+            },
+            y: {
+              title: { display: true, text: 'EMG Value' }
+            }
+          }
+        }
+      });
+    }
+
+    document.getElementById('connectButton').addEventListener('click', connectToESP32);
+    document.getElementById('stopButton').addEventListener('click', stopReceivingData);
+    document.getElementById('continueButton').addEventListener('click', continueReceivingData);
+    document.getElementById('endButton').addEventListener('click', endReceivingData);
+    document.getElementById('saveButton').addEventListener('click', saveToExcel);
+  </script>
+</body>
+</html>
