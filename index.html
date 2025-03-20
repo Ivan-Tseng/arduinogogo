@@ -10,33 +10,33 @@
 <body>
   <h1>ESP32 EMG Data</h1>
 
-  <!-- Real-time plotting functionality -->
+  <!-- 連接ESP32和控制的按鈕 -->
   <button id="connectButton">Connect to ESP32</button>
   <button id="stopButton" disabled>Stop</button>
   <button id="continueButton" disabled>Continue</button>
   <button id="endButton" disabled>End</button>
-  <button id="saveButton" disabled>Save to Excel</button>
+  <button id="saveButton" disabled>Save to CSV</button>
   <canvas id="emgChart" width="400" height="200"></canvas>
   <div id="dataDisplay">Waiting for data...</div>
 
-  <!-- Read Excel and plot functionality -->
+  <!-- 從Excel讀取和繪製數據的功能 -->
   <h2>Read and Plot from Excel</h2>
   <input type="file" id="upload" accept=".xlsx, .xls" />
   <canvas id="excelChart" width="400" height="200"></canvas>
 
   <script>
     let characteristic;
-    let dataArray = []; // Array to store real-time data
-    let liveChart, excelChart; // Real-time chart and Excel chart
-    const maxDataPoints = 50; // Maximum data points in real-time chart
-    let receivingData = true; // Control whether data is being received
+    let dataArray = []; // 用於儲存即時數據的陣列
+    let liveChart, excelChart; // 即時圖表和Excel圖表
+    const maxDataPoints = 50; // 即時圖表中的最大數據點
+    let receivingData = true; // 控制是否正在接收數據
 
-    // Connect to ESP32 and initialize real-time chart
+    // 連接到ESP32並初始化即時圖表
     async function connectToESP32() {
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 Service UUID
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32的服務UUID
         });
 
         const server = await device.gatt.connect();
@@ -51,46 +51,46 @@
         document.getElementById('stopButton').disabled = false;
         document.getElementById('endButton').disabled = false;
 
-        initializeLiveChart(); // Initialize real-time chart
+        initializeLiveChart(); // 初始化即時圖表
       } catch (error) {
         console.error('Error:', error);
         document.getElementById('dataDisplay').innerText = "Connection failed.";
       }
     }
 
-    // Handle incoming real-time data
+    // 處理接收到的即時數據
     function handleData(event) {
-      if (!receivingData) return; // If not receiving, return immediately
+      if (!receivingData) return; // 如果不接收數據，則直接返回
 
       const value = new TextDecoder().decode(event.target.value);
-      const timestamp = new Date().toLocaleTimeString(); // Simplified timestamp
+      const timestamp = new Date().toLocaleTimeString(); // 簡化的時間戳
 
       dataArray.push({ timestamp, value: parseInt(value, 10) });
 
-      // Limit the size of the data array
+      // 限制數據陣列的大小
       if (dataArray.length > maxDataPoints) {
         dataArray.shift();
       }
 
       document.getElementById('dataDisplay').innerText = `Received: ${value}`;
-      updateLiveChart(); // Update real-time chart
+      updateLiveChart(); // 更新即時圖表
     }
 
-    // Stop receiving data
+    // 停止接收數據
     function stopReceivingData() {
       receivingData = false;
       document.getElementById('stopButton').disabled = true;
       document.getElementById('continueButton').disabled = false;
     }
 
-    // Continue receiving data
+    // 繼續接收數據
     function continueReceivingData() {
       receivingData = true;
       document.getElementById('stopButton').disabled = false;
       document.getElementById('continueButton').disabled = true;
     }
 
-    // End receiving data and disconnect
+    // 結束接收數據並斷開連接
     async function endReceivingData() {
       try {
         if (characteristic) {
@@ -103,7 +103,7 @@
         document.getElementById('endButton').disabled = true;
         document.getElementById('connectButton').disabled = false;
 
-        // Reset data and chart
+        // 重置數據和圖表
         dataArray = [];
         if (liveChart) {
           liveChart.data.labels = [];
@@ -111,7 +111,7 @@
           liveChart.update();
         }
 
-        // Refresh Bluetooth device to ensure reconnection is possible
+        // 刷新藍牙設備以確保可以重新連接
         if (navigator.bluetooth) {
           await navigator.bluetooth.getAvailability();
         }
@@ -120,15 +120,22 @@
       }
     }
 
-    // Save data to Excel
-    function saveToExcel() {
-      const worksheet = XLSX.utils.json_to_sheet(dataArray);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "EMG_Data");
-      XLSX.writeFile(workbook, "EMG_Data.xlsx");
+    // 將數據保存為CSV
+    function saveToCSV() {
+      let csvContent = "timestamp,value\n"; // CSV的標題行
+      dataArray.forEach(item => {
+        csvContent += `${item.timestamp},${item.value}\n`; // 逐行添加數據
+      });
+
+      // 創建CSV文件並下載
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = "EMG_Data.csv"; // 設定下載文件名
+      link.click();
     }
 
-    // Initialize real-time chart
+    // 初始化即時圖表
     function initializeLiveChart() {
       const ctx = document.getElementById('emgChart').getContext('2d');
       liveChart = new Chart(ctx, {
@@ -156,7 +163,7 @@
       });
     }
 
-    // Update real-time chart
+    // 更新即時圖表
     function updateLiveChart() {
       const labels = dataArray.map(item => item.timestamp);
       const values = dataArray.map(item => item.value);
@@ -166,7 +173,7 @@
       liveChart.update();
     }
 
-    // Read Excel and initialize chart
+    // 讀取Excel並初始化圖表
     document.getElementById('upload').addEventListener('change', function(event) {
       const file = event.target.files[0];
       const reader = new FileReader();
@@ -188,11 +195,11 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // Draw Excel data chart
+    // 繪製Excel數據圖表
     function drawExcelChart(labels, values) {
       const ctx = document.getElementById('excelChart').getContext('2d');
 
-      // Destroy the old chart if it exists
+      // 如果存在舊圖表，則銷毀
       if (excelChart) {
         excelChart.destroy();
       }
@@ -222,11 +229,12 @@
       });
     }
 
+    // 按鈕事件
     document.getElementById('connectButton').addEventListener('click', connectToESP32);
     document.getElementById('stopButton').addEventListener('click', stopReceivingData);
     document.getElementById('continueButton').addEventListener('click', continueReceivingData);
     document.getElementById('endButton').addEventListener('click', endReceivingData);
-    document.getElementById('saveButton').addEventListener('click', saveToExcel);
+    document.getElementById('saveButton').addEventListener('click', saveToCSV); // 保存為CSV
   </script>
 </body>
 </html>
