@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ESP32 馬達與 EMG 控制</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        button { font-size: 20px; margin: 10px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>ESP32 馬達與 EMG 控制</h1>
+    <button onclick="sendCommand('forward')">馬達前進</button>
+    <button onclick="sendCommand('backward')">馬達後退</button>
+    <button onclick="sendCommand('reset')">重新開始數據採集</button>
+    <p>EMG 數值: <span id="emgData">--</span></p>
+    
+    <script>
+        let device, server, motorCharacteristic, resetCharacteristic, emgCharacteristic;
+
+        async function connectBLE() {
+            try {
+                device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
+                });
+                server = await device.gatt.connect();
+                const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+                motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+                resetCharacteristic = await service.getCharacteristic('d1e2f3a4-5678-9101-1121-314151617182');
+                emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+                
+                emgCharacteristic.startNotifications();
+                emgCharacteristic.addEventListener('characteristicvaluechanged', event => {
+                    let value = new TextDecoder().decode(event.target.value);
+                    document.getElementById('emgData').innerText = value;
+                });
+                
+                alert("🔗 BLE 連接成功！");
+            } catch (error) {
+                alert("❌ BLE 連接失敗: " + error);
+            }
+        }
+
+        async function sendCommand(command) {
+            if (!server || !server.connected) {
+                alert("請先連接 BLE 裝置！");
+                return;
+            }
+            let characteristic = command === 'reset' ? resetCharacteristic : motorCharacteristic;
+            await characteristic.writeValue(new TextEncoder().encode(command));
+        }
+    </script>
+    <br>
+    <button onclick="connectBLE()">連接 ESP32</button>
+</body>
+</html>
