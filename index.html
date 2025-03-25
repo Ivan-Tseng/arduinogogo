@@ -1,115 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 EMG & Motor Control</title>
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>ESP32 馬達與 EMG 控制</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        button { font-size: 20px; margin: 10px; padding: 10px; }
+    </style>
 </head>
 <body>
-  <h1>ESP32 EMG Data & Motor Control</h1>
-  
-  <!-- 控制區域 -->
-  <button id="connectButton">Connect to ESP32</button>
-  <button id="stopButton" disabled>Stop</button>
-  <button id="continueButton" disabled>Continue</button>
-  <button id="endButton" disabled>End</button>
-  <button id="saveButton" disabled>Save to CSV</button>
-  <button id="motorForwardButton" disabled>Motor Forward</button>
-  <button id="motorReverseButton" disabled>Motor Reverse</button>
-  
-  <canvas id="emgChart" width="400" height="200"></canvas>
-  <div id="dataDisplay">Waiting for data...</div>
-  
-  <script>
-    let characteristicEMG, characteristicMotor;
-    let dataArray = [];
-    let liveChart;
-    const maxDataPoints = 50;
-    let receivingData = true;
-    let deviceConnected = false;
+    <h1>ESP32 馬達與 EMG 控制</h1>
+    <button onclick="sendCommand('forward')">馬達前進</button>
+    <button onclick="sendCommand('backward')">馬達後退</button>
+    <button onclick="sendCommand('reset')">重新開始數據採集</button>
+    <p>EMG 數值: <span id="emgData">--</span></p>
+    
+    <script>
+        let device, server, motorCharacteristic, resetCharacteristic, emgCharacteristic;
 
-    async function connectToESP32() {
-      try {
-        const device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
-        });
+        async function connectBLE() {
+            try {
+                device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
+                });
+                server = await device.gatt.connect();
+                const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+                motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+                resetCharacteristic = await service.getCharacteristic('d1e2f3a4-5678-9101-1121-314151617182');
+                emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+                
+                emgCharacteristic.startNotifications();
+                emgCharacteristic.addEventListener('characteristicvaluechanged', event => {
+                    let value = new TextDecoder().decode(event.target.value);
+                    document.getElementById('emgData').innerText = value;
+                });
+                
+                alert("🔗 BLE 連接成功！");
+            } catch (error) {
+                alert("❌ BLE 連接失敗: " + error);
+            }
+        }
 
-        const server = await device.gatt.connect();
-        const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-        characteristicEMG = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
-        characteristicMotor = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
-
-        await characteristicEMG.startNotifications();
-        characteristicEMG.addEventListener('characteristicvaluechanged', handleData);
-        
-        document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
-        toggleButtons(true);
-        initializeLiveChart();
-        deviceConnected = true;
-      } catch (error) {
-        console.error('Connection failed:', error);
-        document.getElementById('dataDisplay').innerText = "Connection failed.";
-      }
-    }
-
-    function handleData(event) {
-      if (!receivingData) return;
-      const value = new TextDecoder().decode(event.target.value);
-      const timestamp = new Date().toLocaleTimeString();
-      dataArray.push({ timestamp, value: parseInt(value, 10) });
-      if (dataArray.length > maxDataPoints) dataArray.shift();
-      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
-      updateLiveChart();
-    }
-
-    async function sendMotorCommand(command) {
-      if (!deviceConnected) return;
-      await characteristicMotor.writeValue(new TextEncoder().encode(command));
-    }
-
-    function toggleButtons(state) {
-      document.getElementById('stopButton').disabled = !state;
-      document.getElementById('continueButton').disabled = state;
-      document.getElementById('endButton').disabled = !state;
-      document.getElementById('saveButton').disabled = !state;
-      document.getElementById('motorForwardButton').disabled = !state;
-      document.getElementById('motorReverseButton').disabled = !state;
-    }
-
-    function initializeLiveChart() {
-      const ctx = document.getElementById('emgChart').getContext('2d');
-      liveChart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: [], datasets: [{ label: 'EMG Value', data: [], borderColor: 'blue', borderWidth: 2 }] },
-        options: { scales: { x: { title: { text: 'Time' } }, y: { title: { text: 'EMG Value' } } } }
-      });
-    }
-
-    function updateLiveChart() {
-      liveChart.data.labels = dataArray.map(item => item.timestamp);
-      liveChart.data.datasets[0].data = dataArray.map(item => item.value);
-      liveChart.update();
-    }
-
-    function saveToCSV() {
-      let csvContent = "timestamp,value\n" + dataArray.map(item => `${item.timestamp},${item.value}`).join("\n");
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = "EMG_Data.csv";
-      link.click();
-    }
-
-    document.getElementById('connectButton').addEventListener('click', connectToESP32);
-    document.getElementById('stopButton').addEventListener('click', () => receivingData = false);
-    document.getElementById('continueButton').addEventListener('click', () => receivingData = true);
-    document.getElementById('endButton').addEventListener('click', () => location.reload());
-    document.getElementById('saveButton').addEventListener('click', saveToCSV);
-    document.getElementById('motorForwardButton').addEventListener('click', () => sendMotorCommand('forward'));
-    document.getElementById('motorReverseButton').addEventListener('click', () => sendMotorCommand('backward'));
-  </script>
+        async function sendCommand(command) {
+            if (!server || !server.connected) {
+                alert("請先連接 BLE 裝置！");
+                return;
+            }
+            let characteristic = command === 'reset' ? resetCharacteristic : motorCharacteristic;
+            await characteristic.writeValue(new TextEncoder().encode(command));
+        }
+    </script>
+    <br>
+    <button onclick="connectBLE()">連接 ESP32</button>
 </body>
 </html>
