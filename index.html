@@ -25,26 +25,48 @@
         let emgData = [];
         let labels = [];
         let chart;
+        let isConnected = false;
 
         async function connectBLE() {
             try {
+                if (isConnected) {
+                    console.log("已連接 ESP32");
+                    return;
+                }
+
                 bleDevice = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
                 });
+
                 const server = await bleDevice.gatt.connect();
+                isConnected = true;
                 const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
                 motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
                 resetCharacteristic = await service.getCharacteristic('d1e2f3a4-5678-9101-1121-314151617182');
                 emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+
+                // 監聽 EMG 數據
                 emgCharacteristic.startNotifications();
                 emgCharacteristic.addEventListener('characteristicvaluechanged', handleEMGData);
+
                 document.getElementById("status").innerText = "✅ 已連接";
                 setupChart();
+
+                // BLE 斷開時自動重連
+                bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
             } catch (error) {
                 console.error(error);
                 document.getElementById("status").innerText = "❌ 連接失敗";
+                isConnected = false;
             }
+        }
+
+        function onDisconnected() {
+            console.log("BLE 斷開，嘗試重新連接...");
+            isConnected = false;
+            document.getElementById("status").innerText = "🔴 連線中斷";
+            setTimeout(connectBLE, 3000); // 3秒後自動重連
         }
 
         async function sendCommand(command) {
@@ -52,6 +74,14 @@
                 let encoder = new TextEncoder();
                 await motorCharacteristic.writeValue(encoder.encode(command));
                 console.log(`Sent: ${command}`);
+
+                // 等待馬達指令執行後，確保 EMG 數據繼續傳輸
+                setTimeout(() => {
+                    if (emgCharacteristic) {
+                        emgCharacteristic.startNotifications();
+                        console.log("🔄 重新開始 EMG 數據接收");
+                    }
+                }, 1500);
             }
         }
         
@@ -60,8 +90,11 @@
                 let encoder = new TextEncoder();
                 await resetCharacteristic.writeValue(encoder.encode("reset"));
                 console.log("EMG 重新開始");
+                
+                // 清除數據並更新圖表
                 emgData = [];
                 labels = [];
+                chart.update();
             }
         }
 
@@ -75,7 +108,11 @@
                 }
                 emgData.push(emgValue);
                 labels.push(new Date().toLocaleTimeString());
-                chart.update();
+
+                // 只在一定間隔內更新圖表，避免過度渲染
+                if (emgData.length % 5 === 0) {
+                    chart.update();
+                }
             }
         }
 
