@@ -1,56 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh">
 <head>
-    <title>ESP32 馬達與 EMG 控制</title>
-    <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        button { font-size: 20px; margin: 10px; padding: 10px; }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 BLE 控制與 EMG 監測</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <h1>ESP32 馬達與 EMG 控制</h1>
-    <button onclick="sendCommand('forward')">馬達前進</button>
-    <button onclick="sendCommand('backward')">馬達後退</button>
-    <button onclick="sendCommand('reset')">重新開始數據採集</button>
-    <p>EMG 數值: <span id="emgData">--</span></p>
+    <h1>ESP32 BLE 馬達控制與 EMG 數據</h1>
+    <button onclick="connectBLE()">🔗 連接 ESP32</button>
+    <button onclick="sendCommand('forward')">🚀 前進</button>
+    <button onclick="sendCommand('backward')">🔄 後退</button>
+    <button onclick="sendReset()">🔄 重新開始 EMG</button>
+    <button onclick="downloadCSV()">💾 下載數據</button>
+    <p id="status">未連接</p>
+    
+    <canvas id="emgChart" width="400" height="200"></canvas>
     
     <script>
-        let device, server, motorCharacteristic, resetCharacteristic, emgCharacteristic;
+        let bleDevice;
+        let motorCharacteristic;
+        let resetCharacteristic;
+        let emgCharacteristic;
+        let emgData = [];
+        let labels = [];
+        let chart;
 
         async function connectBLE() {
             try {
-                device = await navigator.bluetooth.requestDevice({
+                bleDevice = await navigator.bluetooth.requestDevice({
                     acceptAllDevices: true,
                     optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
                 });
-                server = await device.gatt.connect();
+                const server = await bleDevice.gatt.connect();
                 const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
                 motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
                 resetCharacteristic = await service.getCharacteristic('d1e2f3a4-5678-9101-1121-314151617182');
                 emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
-                
                 emgCharacteristic.startNotifications();
-                emgCharacteristic.addEventListener('characteristicvaluechanged', event => {
-                    let value = new TextDecoder().decode(event.target.value);
-                    document.getElementById('emgData').innerText = value;
-                });
-                
-                alert("🔗 BLE 連接成功！");
+                emgCharacteristic.addEventListener('characteristicvaluechanged', handleEMGData);
+                document.getElementById("status").innerText = "✅ 已連接";
+                setupChart();
             } catch (error) {
-                alert("❌ BLE 連接失敗: " + error);
+                console.error(error);
+                document.getElementById("status").innerText = "❌ 連接失敗";
             }
         }
 
         async function sendCommand(command) {
-            if (!server || !server.connected) {
-                alert("請先連接 BLE 裝置！");
-                return;
+            if (motorCharacteristic) {
+                let encoder = new TextEncoder();
+                await motorCharacteristic.writeValue(encoder.encode(command));
+                console.log(`Sent: ${command}`);
             }
-            let characteristic = command === 'reset' ? resetCharacteristic : motorCharacteristic;
-            await characteristic.writeValue(new TextEncoder().encode(command));
+        }
+        
+        async function sendReset() {
+            if (resetCharacteristic) {
+                let encoder = new TextEncoder();
+                await resetCharacteristic.writeValue(encoder.encode("reset"));
+                console.log("EMG 重新開始");
+                emgData = [];
+                labels = [];
+            }
+        }
+
+        function handleEMGData(event) {
+            let value = new TextDecoder().decode(event.target.value);
+            let emgValue = parseInt(value);
+            if (!isNaN(emgValue)) {
+                if (emgData.length > 50) {
+                    emgData.shift();
+                    labels.shift();
+                }
+                emgData.push(emgValue);
+                labels.push(new Date().toLocaleTimeString());
+                chart.update();
+            }
+        }
+
+        function setupChart() {
+            let ctx = document.getElementById('emgChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'EMG 數據',
+                        data: emgData,
+                        borderColor: 'blue',
+                        borderWidth: 1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { display: true },
+                        y: { display: true }
+                    }
+                }
+            });
+        }
+
+        function downloadCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,Time,EMG Value\n";
+            for (let i = 0; i < emgData.length; i++) {
+                csvContent += labels[i] + "," + emgData[i] + "\n";
+            }
+            let encodedUri = encodeURI(csvContent);
+            let link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "emg_data.csv");
+            document.body.appendChild(link);
+            link.click();
         }
     </script>
-    <br>
-    <button onclick="connectBLE()">連接 ESP32</button>
 </body>
 </html>
