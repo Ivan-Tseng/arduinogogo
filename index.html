@@ -178,19 +178,19 @@
     }
 
 
-function motorForward() {
-  if (!motorControlEnabled || !characteristic) return;
-  const command = new TextEncoder().encode("FORWARD");
-  characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
-  console.log("Sent FORWARD command");
-}
+  function motorForward() {
+    if (!motorControlEnabled || !characteristic) return;
+    const command = new TextEncoder().encode("FORWARD");
+    characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
+    console.log("Sent FORWARD command");
+    }
 
-function motorReverse() {
-  if (!motorControlEnabled || !characteristic) return;
-  const command = new TextEncoder().encode("REVERSE");
-  characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
-  console.log("Sent REVERSE command");
-}
+  function motorReverse() {
+    if (!motorControlEnabled || !characteristic) return;
+    const command = new TextEncoder().encode("REVERSE");
+    characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
+    console.log("Sent REVERSE command");
+    }
     
     // 讀取Excel並初始化圖表
     document.getElementById('upload').addEventListener('change', function(event) {
