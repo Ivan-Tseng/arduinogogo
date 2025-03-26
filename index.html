@@ -177,26 +177,21 @@
       liveChart.update();
     }
 
-    // 控制馬達正轉1秒鐘
-    function motorForward() {
-      if (!motorControlEnabled) return;
 
-      console.log("Motor Forward for 1 second");
-      setTimeout(() => {
-        console.log("Motor Stopped");
-      }, 1000);
-    }
+function motorForward() {
+  if (!motorControlEnabled || !characteristic) return;
+  const command = new TextEncoder().encode("FORWARD");
+  characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
+  console.log("Sent FORWARD command");
+}
 
-    // 控制馬達反轉1秒鐘
-    function motorReverse() {
-      if (!motorControlEnabled) return;
-
-      console.log("Motor Reverse for 1 second");
-      setTimeout(() => {
-        console.log("Motor Stopped");
-      }, 1000);
-    }
-
+function motorReverse() {
+  if (!motorControlEnabled || !characteristic) return;
+  const command = new TextEncoder().encode("REVERSE");
+  characteristic.writeValue(command).catch(error => console.error("Write failed:", error));
+  console.log("Sent REVERSE command");
+}
+    
     // 讀取Excel並初始化圖表
     document.getElementById('upload').addEventListener('change', function(event) {
       const file = event.target.files[0];
