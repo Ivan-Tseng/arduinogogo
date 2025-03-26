@@ -3,261 +3,60 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 EMG Data Visualization</title>
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <title>ESP32 Motor Control</title>
 </head>
 <body>
-  <h1>ESP32 EMG Data</h1>
+  <h1>ESP32 Motor Control</h1>
 
-  <!-- 控制馬達的按鈕 -->
+  <!-- 馬達控制按鈕 -->
   <button id="connectButton">Connect to ESP32</button>
-  <button id="stopButton" disabled>Stop</button>
-  <button id="continueButton" disabled>Continue</button>
-  <button id="endButton" disabled>End</button>
-  <button id="saveButton" disabled>Save to CSV</button>
-  <button id="motorForwardButton">Motor Forward for 1 second</button>
-  <button id="motorReverseButton">Motor Reverse for 1 second</button>
-  <canvas id="emgChart" width="400" height="200"></canvas>
-  <div id="dataDisplay">Waiting for data...</div>
+  <button id="motorForwardButton" disabled>Motor Forward</button>
+  <button id="motorReverseButton" disabled>Motor Reverse</button>
 
-  <!-- 從Excel讀取和繪製數據的功能 -->
-  <h2>Read and Plot from Excel</h2>
-  <input type="file" id="upload" accept=".xlsx, .xls" />
-  <canvas id="excelChart" width="400" height="200"></canvas>
+  <div id="status">Status: Not Connected</div>
 
   <script>
-    let characteristic;
-    let dataArray = []; // 用於儲存即時數據的陣列
-    let liveChart, excelChart; // 即時圖表和Excel圖表
-    const maxDataPoints = 50; // 即時圖表中的最大數據點
-    let receivingData = true; // 控制是否正在接收數據
-    let motorControlEnabled = false; // 控制馬達操作的標誌
+    let motorCharacteristic;
 
-    // 連接到ESP32並初始化即時圖表
+    // 連接到 ESP32
     async function connectToESP32() {
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32的服務UUID
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 的服務 UUID
         });
 
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-        characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+        motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181'); // 馬達控制特徵值 UUID
 
-        await characteristic.startNotifications();
-        characteristic.addEventListener('characteristicvaluechanged', handleData);
-
-        document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
-        document.getElementById('saveButton').disabled = false;
-        document.getElementById('stopButton').disabled = false;
-        document.getElementById('endButton').disabled = false;
-
-        initializeLiveChart(); // 初始化即時圖表
-        motorControlEnabled = true; // 啟用馬達控制
+        document.getElementById('status').innerText = "Status: Connected";
+        document.getElementById('motorForwardButton').disabled = false;
+        document.getElementById('motorReverseButton').disabled = false;
       } catch (error) {
         console.error('Error:', error);
-        document.getElementById('dataDisplay').innerText = "Connection failed.";
+        document.getElementById('status').innerText = "Status: Connection Failed";
       }
     }
 
-    // 處理接收到的即時數據
-    function handleData(event) {
-      if (!receivingData) return; // 如果不接收數據，則直接返回
-
-      const value = new TextDecoder().decode(event.target.value);
-      const timestamp = new Date().toLocaleTimeString(); // 簡化的時間戳
-
-      dataArray.push({ timestamp, value: parseInt(value, 10) });
-
-      // 限制數據陣列的大小
-      if (dataArray.length > maxDataPoints) {
-        dataArray.shift();
-      }
-
-      document.getElementById('dataDisplay').innerText = `Received: ${value}`;
-      updateLiveChart(); // 更新即時圖表
+    // 控制馬達前進
+    async function motorForward() {
+      if (!motorCharacteristic) return;
+      const encoder = new TextEncoder();
+      await motorCharacteristic.writeValue(encoder.encode("forward"));
+      console.log("Motor Forward Command Sent");
     }
 
-    // 停止接收數據
-    function stopReceivingData() {
-      receivingData = false;
-      document.getElementById('stopButton').disabled = true;
-      document.getElementById('continueButton').disabled = false;
+    // 控制馬達後退
+    async function motorReverse() {
+      if (!motorCharacteristic) return;
+      const encoder = new TextEncoder();
+      await motorCharacteristic.writeValue(encoder.encode("backward"));
+      console.log("Motor Reverse Command Sent");
     }
 
-    // 繼續接收數據
-    function continueReceivingData() {
-      receivingData = true;
-      document.getElementById('stopButton').disabled = false;
-      document.getElementById('continueButton').disabled = true;
-    }
-
-    // 結束接收數據並斷開連接
-    async function endReceivingData() {
-      try {
-        if (characteristic) {
-          await characteristic.stopNotifications();
-          characteristic.removeEventListener('characteristicvaluechanged', handleData);
-        }
-        document.getElementById('dataDisplay').innerText = "Connection ended. Refreshing...";
-        document.getElementById('stopButton').disabled = true;
-        document.getElementById('continueButton').disabled = true;
-        document.getElementById('endButton').disabled = true;
-        document.getElementById('connectButton').disabled = false;
-
-        // 重置數據和圖表
-        dataArray = [];
-        if (liveChart) {
-          liveChart.data.labels = [];
-          liveChart.data.datasets[0].data = [];
-          liveChart.update();
-        }
-
-        // 刷新藍牙設備以確保可以重新連接
-        if (navigator.bluetooth) {
-          await navigator.bluetooth.getAvailability();
-        }
-      } catch (error) {
-        console.error('Error while ending connection:', error);
-      }
-    }
-
-    // 將數據保存為CSV
-    function saveToCSV() {
-      let csvContent = "timestamp,value\n"; // CSV的標題行
-      dataArray.forEach(item => {
-        csvContent += `${item.timestamp},${item.value}\n`; // 逐行添加數據
-      });
-
-      // 創建CSV文件並下載
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = "EMG_Data.csv"; // 設定下載文件名
-      link.click();
-    }
-
-    // 初始化即時圖表
-    function initializeLiveChart() {
-      const ctx = document.getElementById('emgChart').getContext('2d');
-      liveChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            label: 'Real-time EMG Value',
-            data: [],
-            borderColor: 'rgba(75, 192, 192, 1)',
-            borderWidth: 2,
-            fill: false
-          }]
-        },
-        options: {
-          scales: {
-            x: {
-              title: { display: true, text: 'Time' }
-            },
-            y: {
-              title: { display: true, text: 'EMG Value' }
-            }
-          }
-        }
-      });
-    }
-
-    // 更新即時圖表
-    function updateLiveChart() {
-      const labels = dataArray.map(item => item.timestamp);
-      const values = dataArray.map(item => item.value);
-
-      liveChart.data.labels = labels;
-      liveChart.data.datasets[0].data = values;
-      liveChart.update();
-    }
-
-    // 控制馬達正轉1秒鐘
-    function motorForward() {
-      if (!motorControlEnabled) return;
-
-      console.log("Motor Forward for 1 second");
-      setTimeout(() => {
-        console.log("Motor Stopped");
-      }, 1000);
-    }
-
-    // 控制馬達反轉1秒鐘
-    function motorReverse() {
-      if (!motorControlEnabled) return;
-
-      console.log("Motor Reverse for 1 second");
-      setTimeout(() => {
-        console.log("Motor Stopped");
-      }, 1000);
-    }
-
-    // 讀取Excel並初始化圖表
-    document.getElementById('upload').addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      const reader = new FileReader();
-
-      reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-        const labels = jsonData.map(row => row['timestamp'] || row['Timestamp']);
-        const values = jsonData.map(row => row['value'] || row['Value'] || row['EMG Value']);
-
-        drawExcelChart(labels, values);
-      };
-
-      reader.readAsArrayBuffer(file);
-    });
-
-    // 繪製Excel數據圖表
-    function drawExcelChart(labels, values) {
-      const ctx = document.getElementById('excelChart').getContext('2d');
-
-      if (excelChart) {
-        excelChart.destroy();
-      }
-
-      excelChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Excel Data EMG Value',
-            data: values,
-            borderColor: 'rgba(54, 162, 235, 1)',
-            borderWidth: 2,
-            fill: false
-          }]
-        },
-        options: {
-          scales: {
-            x: {
-              title: { display: true, text: 'Time' }
-            },
-            y: {
-              title: { display: true, text: 'EMG Value' }
-            }
-          }
-        }
-      });
-    }
-
-    // 事件綁定
+    // 綁定按鈕事件
     document.getElementById('connectButton').addEventListener('click', connectToESP32);
-    document.getElementById('stopButton').addEventListener('click', stopReceivingData);
-    document.getElementById('continueButton').addEventListener('click', continueReceivingData);
-    document.getElementById('endButton').addEventListener('click', endReceivingData);
-    document.getElementById('saveButton').addEventListener('click', saveToCSV);
     document.getElementById('motorForwardButton').addEventListener('click', motorForward);
     document.getElementById('motorReverseButton').addEventListener('click', motorReverse);
   </script>
