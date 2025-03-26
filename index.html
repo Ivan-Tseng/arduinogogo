@@ -1,34 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ESP32 Motor Control</title>
-</head>
 <body>
-  <h1>ESP32 Motor Control</h1>
-
-  <!-- 馬達控制按鈕 -->
+  <h1>ESP32 Motor & EMG Control</h1>
   <button id="connectButton">Connect to ESP32</button>
   <button id="motorForwardButton" disabled>Motor Forward</button>
   <button id="motorReverseButton" disabled>Motor Reverse</button>
-
   <div id="status">Status: Not Connected</div>
+  <div id="emgDisplay">EMG: -</div>
 
   <script>
-    let motorCharacteristic;
+    let motorCharacteristic, emgCharacteristic;
 
-    // 連接到 ESP32
     async function connectToESP32() {
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 的服務 UUID
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
         });
 
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-        motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181'); // 馬達控制特徵值 UUID
+        
+        motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+        emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+        
+        await emgCharacteristic.startNotifications();
+        emgCharacteristic.addEventListener('characteristicvaluechanged', handleEMGUpdate);
 
         document.getElementById('status').innerText = "Status: Connected";
         document.getElementById('motorForwardButton').disabled = false;
@@ -39,20 +36,23 @@
       }
     }
 
-    // 控制馬達前進
+    function handleEMGUpdate(event) {
+      const decoder = new TextDecoder();
+      const emgValue = decoder.decode(event.target.value);
+      document.getElementById('emgDisplay').innerText = `EMG: ${emgValue}`;
+    }
+
+    // 控制馬達函數
     async function motorForward() {
       if (!motorCharacteristic) return;
       const encoder = new TextEncoder();
       await motorCharacteristic.writeValue(encoder.encode("forward"));
-      console.log("Motor Forward Command Sent");
     }
 
-    // 控制馬達後退
     async function motorReverse() {
       if (!motorCharacteristic) return;
       const encoder = new TextEncoder();
       await motorCharacteristic.writeValue(encoder.encode("backward"));
-      console.log("Motor Reverse Command Sent");
     }
 
     // 綁定按鈕事件
