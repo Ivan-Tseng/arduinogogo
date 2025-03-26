@@ -3,67 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 BLE EMG Monitor</title>
+    <title>ESP32 Motor Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        .button {
+            padding: 15px 25px;
+            font-size: 18px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+        }
+        .start {
+            background-color: green;
+            color: white;
+        }
+        .stop {
+            background-color: red;
+            color: white;
+        }
+    </style>
 </head>
 <body>
-    <h2>ESP32 Bluetooth EMG Monitor</h2>
-    <button onclick="connectToESP32()">Connect</button>
-    <button onclick="motorForward()">Motor Forward</button>
-    <button onclick="motorReverse()">Motor Reverse</button>
-    <button onclick="motorStop()">Motor Stop</button>
-    <p id="dataDisplay">Not connected</p>
+
+    <h1>ESP32 Motor Control</h1>
+    <p>Control your motor using the buttons below:</p>
+    
+    <button class="button start" onclick="sendMotorCommand('1')">Start Motor</button>
+    <button class="button stop" onclick="sendMotorCommand('0')">Stop Motor</button>
 
     <script>
-        let emgCharacteristic = null;
-        let motorCharacteristic = null;
+        let device;
+        let characteristic;
 
-        async function connectToESP32() {
+        async function connectBLE() {
             try {
                 const device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
-                    optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b']
+                    filters: [{ services: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] }]
                 });
 
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-
-                emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
-                motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
-
-                await emgCharacteristic.startNotifications();
-                emgCharacteristic.addEventListener('characteristicvaluechanged', handleEMGData);
-
-                document.getElementById('dataDisplay').innerText = "Connected! Waiting for EMG data...";
+                characteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+                console.log("BLE Device Connected!");
             } catch (error) {
-                console.error('Error:', error);
-                document.getElementById('dataDisplay').innerText = "Connection failed.";
+                console.log("Connection failed: ", error);
             }
         }
 
-        function motorForward() {
-            sendMotorCommand("FORWARD");
+        async function sendMotorCommand(command) {
+            if (!characteristic) {
+                await connectBLE(); // Ensure we are connected
+            }
+
+            try {
+                const encoder = new TextEncoder();
+                await characteristic.writeValue(encoder.encode(command));
+                console.log(`Command sent: ${command}`);
+            } catch (error) {
+                console.log("Failed to send command: ", error);
+            }
         }
 
-        function motorReverse() {
-            sendMotorCommand("REVERSE");
-        }
-
-        function motorStop() {
-            sendMotorCommand("STOP");
-        }
-
-        function sendMotorCommand(command) {
-            if (!motorCharacteristic) return;
-            const commandData = new TextEncoder().encode(command);
-            motorCharacteristic.writeValue(commandData)
-                .then(() => console.log("Sent command:", command))
-                .catch(error => console.error("Write failed:", error));
-        }
-
-        function handleEMGData(event) {
-            const value = new TextDecoder().decode(event.target.value);
-            document.getElementById('dataDisplay').innerText = "EMG Value: " + value;
-        }
+        // Automatically try to connect on page load
+        connectBLE();
     </script>
+
 </body>
 </html>
