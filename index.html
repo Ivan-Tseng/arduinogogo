@@ -28,6 +28,7 @@
 
   <script>
     let characteristic;
+    let characteristicMotor;
     let dataArray = []; // 用於儲存即時數據的陣列
     let liveChart, excelChart; // 即時圖表和Excel圖表
     const maxDataPoints = 50; // 即時圖表中的最大數據點
@@ -45,6 +46,7 @@
         const server = await device.gatt.connect();
         const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
         characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+        characteristicMotor = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181'); // 馬達控制特徵值
 
         await characteristic.startNotifications();
         characteristic.addEventListener('characteristicvaluechanged', handleData);
@@ -178,22 +180,26 @@
     }
 
     // 控制馬達正轉1秒鐘
-    function motorForward() {
+    async function motorForward() {
       if (!motorControlEnabled) return;
 
       console.log("Motor Forward for 1 second");
+      await characteristicMotor.writeValue(new TextEncoder().encode("forward"));
       setTimeout(() => {
         console.log("Motor Stopped");
+        characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
     }
 
     // 控制馬達反轉1秒鐘
-    function motorReverse() {
+    async function motorReverse() {
       if (!motorControlEnabled) return;
 
       console.log("Motor Reverse for 1 second");
+      await characteristicMotor.writeValue(new TextEncoder().encode("backward"));
       setTimeout(() => {
         console.log("Motor Stopped");
+        characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
     }
 
@@ -222,19 +228,14 @@
     // 繪製Excel數據圖表
     function drawExcelChart(labels, values) {
       const ctx = document.getElementById('excelChart').getContext('2d');
-
-      if (excelChart) {
-        excelChart.destroy();
-      }
-
       excelChart = new Chart(ctx, {
         type: 'line',
         data: {
           labels: labels,
           datasets: [{
-            label: 'Excel Data EMG Value',
+            label: 'EMG Data from Excel',
             data: values,
-            borderColor: 'rgba(54, 162, 235, 1)',
+            borderColor: 'rgba(255, 99, 132, 1)',
             borderWidth: 2,
             fill: false
           }]
@@ -252,7 +253,7 @@
       });
     }
 
-    // 事件綁定
+    // 綁定按鈕事件
     document.getElementById('connectButton').addEventListener('click', connectToESP32);
     document.getElementById('stopButton').addEventListener('click', stopReceivingData);
     document.getElementById('continueButton').addEventListener('click', continueReceivingData);
