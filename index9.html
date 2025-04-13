@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 EMG & Motor Control</title>
+</head>
+<body>
+  <h1>ESP32 EMG & Motor Control</h1>
+
+  <!-- 連線和控制按鈕 -->
+  <button id="connectButton">Connect to ESP32</button>
+  <button id="motorForwardButton" disabled>Motor Forward</button>
+  <button id="motorReverseButton" disabled>Motor Reverse</button>
+
+  <!-- 顯示 EMG 數據 -->
+  <div id="emgData">EMG Data: </div>
+
+  <script>
+    let emgCharacteristic;
+    let motorCharacteristic;
+
+    // 連接到 ESP32
+    async function connectToESP32() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [ '4fafc201-1fb5-459e-8fcc-c5c9c331914b' ] // ESP32 的服務 UUID
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+
+        // 取得 EMG Characteristic
+        emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+        await emgCharacteristic.startNotifications();
+        emgCharacteristic.addEventListener('characteristicvaluechanged', handleEMGData);
+
+        // 取得 Motor Characteristic
+        motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+
+        // 啟用控制按鈕
+        document.getElementById('motorForwardButton').disabled = false;
+        document.getElementById('motorReverseButton').disabled = false;
+
+      } catch (error) {
+        console.error('連線錯誤:', error);
+      }
+    }
+
+    // 處理 EMG 數據
+    function handleEMGData(event) {
+      const value = event.target.value;
+      const decodedValue = new TextDecoder().decode(value);
+      document.getElementById('emgData').innerText = `EMG Data: ${decodedValue}`;
+    }
+
+    // 馬達控制函數
+    async function motorForward() {
+      if (!motorCharacteristic) return;
+      const encoder = new TextEncoder();
+      await motorCharacteristic.writeValue(encoder.encode("forward"));
+      console.log("Motor Forward Command Sent");
+    }
+
+    async function motorReverse() {
+      if (!motorCharacteristic) return;
+      const encoder = new TextEncoder();
+      await motorCharacteristic.writeValue(encoder.encode("backward"));
+      console.log("Motor Reverse Command Sent");
+    }
+
+    // 事件綁定
+    document.getElementById('connectButton').addEventListener('click', connectToESP32);
+    document.getElementById('motorForwardButton').addEventListener('click', motorForward);
+    document.getElementById('motorReverseButton').addEventListener('click', motorReverse);
+  </script>
+</body>
+</html>
