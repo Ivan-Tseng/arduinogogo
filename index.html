@@ -34,7 +34,6 @@
     const maxDataPoints = 125; // 即時圖表中的最大數據點
     let receivingData = true; // 控制是否正在接收數據
     let motorControlEnabled = false; // 控制馬達操作的標誌
-    let motorTimeout; // 用於停止馬達的計時器
 
     // 連接到ESP32並初始化即時圖表
     async function connectToESP32() {
@@ -181,35 +180,27 @@
       liveChart.update();
     }
 
-    // 控制馬達正轉
+    // 控制馬達正轉1秒鐘
     async function motorForward() {
       if (!motorControlEnabled) return;
 
       console.log("Motor Forward");
       await characteristicMotor.writeValue(new TextEncoder().encode("forward"));
-      // 如果有計時器在運行，先清除它
-      if (motorTimeout) {
-        clearTimeout(motorTimeout);
-      }
-      // 設定1秒後停止馬達
-      motorTimeout = setTimeout(async () => {
+      // 延遲 1 秒後停止馬達
+      setTimeout(async () => {
         console.log("Motor Stopped");
         await characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
     }
 
-    // 控制馬達反轉
+    // 控制馬達反轉1秒鐘
     async function motorReverse() {
       if (!motorControlEnabled) return;
 
       console.log("Motor Reverse");
       await characteristicMotor.writeValue(new TextEncoder().encode("backward"));
-      // 如果有計時器在運行，先清除它
-      if (motorTimeout) {
-        clearTimeout(motorTimeout);
-      }
-      // 設定1秒後停止馬達
-      motorTimeout = setTimeout(async () => {
+      // 延遲 1 秒後停止馬達
+      setTimeout(async () => {
         console.log("Motor Stopped");
         await characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
