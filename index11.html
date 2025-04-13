@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EMG Motor Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>EMG Motor Control</h1>
+    
+    <button id="connectBtn">Connect</button>
+    <button id="forwardBtn" disabled>Forward</button>
+    <button id="backwardBtn" disabled>Backward</button>
+    <button id="stopBtn" disabled>Stop</button>
+    
+    <canvas id="emgChart" width="800" height="200"></canvas>
+
+    <script>
+        let emgCharacteristic, motorCharacteristic;
+        let emgChart;
+        const dataPoints = 100;
+
+        async function connect() {
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ services: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] }]
+            });
+            
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+            
+            // EMG 特徵值
+            emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
+            await emgCharacteristic.startNotifications();
+            
+            // 馬達控制特徵值
+            motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
+
+            // 初始化圖表
+            initChart();
+            
+            // 啟用按鈕
+            document.querySelectorAll('button:not(#connectBtn)').forEach(b => b.disabled = false);
+            
+            // EMG 數據處理
+            emgCharacteristic.addEventListener('characteristicvaluechanged', event => {
+                const raw = new Uint8Array(event.target.value.buffer);
+                const value = (raw[0] << 8) | raw[1];
+                updateChart(value);
+            });
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('emgChart').getContext('2d');
+            emgChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array(dataPoints).fill(''),
+                    datasets: [{
+                        label: 'EMG Value',
+                        data: Array(dataPoints).fill(0),
+                        borderColor: '#4CAF50'
+                    }]
+                },
+                options: { 
+                    animation: false,
+                    scales: { y: { min: 0, max: 4095 } }
+                }
+            });
+        }
+
+        function updateChart(value) {
+            emgChart.data.datasets[0].data.push(value);
+            if (emgChart.data.datasets[0].data.length > dataPoints) {
+                emgChart.data.datasets[0].data.shift();
+            }
+            emgChart.update();
+        }
+
+        async function sendCommand(cmd) {
+            const encoder = new TextEncoder();
+            await motorCharacteristic.writeValue(encoder.encode(cmd));
+        }
+
+        // 事件綁定
+        document.getElementById('connectBtn').addEventListener('click', connect);
+        document.getElementById('forwardBtn').addEventListener('click', () => sendCommand('forward'));
+        document.getElementById('backwardBtn').addEventListener('click', () => sendCommand('backward')); 
+        document.getElementById('stopBtn').addEventListener('click', () => sendCommand('stop'));
+    </script>
+</body>
+</html>
