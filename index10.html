@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 EMG Visualization</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- 引入 Chart.js -->
+</head>
+<body>
+  <h1>ESP32 EMG Data Visualization</h1>
+
+  <!-- 控制按鈕 -->
+  <button id="connectButton">Connect to ESP32</button>
+  <button id="stopButton" disabled>Stop</button>
+  <button id="continueButton" disabled>Continue</button>
+
+  <!-- 顯示 EMG 圖表 -->
+  <canvas id="emgChart" width="400" height="200"></canvas>
+  <div id="dataDisplay">Waiting for data...</div>
+
+  <script>
+    let characteristic; // BLE 特徵值
+    let emgDataArray = []; // 用於儲存即時數據的陣列
+    let emgChart; // Chart.js 圖表實例
+    const maxDataPoints = 50; // 圖表中顯示的最大數據點
+    let receivingData = true; // 是否接收數據的標誌
+
+    // 初始化即時圖表
+    function initializeChart() {
+      const ctx = document.getElementById('emgChart').getContext('2d');
+      emgChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [], // 時間戳
+          datasets: [{
+            label: 'EMG Value',
+            data: [], // EMG 數據
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 2,
+            fill: false
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              title: { display: true, text: 'Time' }
+            },
+            y: {
+              title: { display: true, text: 'EMG Value' },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // 更新圖表數據
+    function updateChart(timestamp, value) {
+      if (emgChart.data.labels.length >= maxDataPoints) {
+        emgChart.data.labels.shift(); // 移除最舊的時間戳
+        emgChart.data.datasets[0].data.shift(); // 移除最舊的數據
+      }
+
+      emgChart.data.labels.push(timestamp); // 添加新的時間戳
+      emgChart.data.datasets[0].data.push(value); // 添加新的數據
+      emgChart.update(); // 更新圖表
+    }
+
+    // 處理接收到的 EMG 數據
+    function handleEMGData(event) {
+      if (!receivingData) return;
+
+      const value = new TextDecoder().decode(event.target.value); // 解碼 BLE 數據
+      const timestamp = new Date().toLocaleTimeString(); // 獲取當前時間戳
+
+      document.getElementById('dataDisplay').innerText = `Received EMG Value: ${value}`;
+      updateChart(timestamp, parseInt(value, 10)); // 更新圖表
+    }
+
+    // 停止接收數據
+    function stopReceivingData() {
+      receivingData = false;
+      document.getElementById('stopButton').disabled = true;
+      document.getElementById('continueButton').disabled = false;
+    }
+
+    // 繼續接收數據
+    function continueReceivingData() {
+      receivingData = true;
+      document.getElementById('stopButton').disabled = false;
+      document.getElementById('continueButton').disabled = true;
+    }
+
+    // 與 ESP32 建立 BLE 連線並啟用通知
+    async function connectToESP32() {
+      try {
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] // ESP32 的服務 UUID
+        });
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
+        characteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8'); // EMG 特徵值 UUID
+
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleEMGData);
+
+        document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
+        document.getElementById('stopButton').disabled = false;
+
+        initializeChart(); // 初始化圖表
+      } catch (error) {
+        console.error('Connection failed:', error);
+        document.getElementById('dataDisplay').innerText = "Connection failed.";
+      }
+    }
+
+    // 綁定按鈕事件
+    document.getElementById('connectButton').addEventListener('click', connectToESP32);
+    document.getElementById('stopButton').addEventListener('click', stopReceivingData);
+    document.getElementById('continueButton').addEventListener('click', continueReceivingData);
+  </script>
+</body>
+</html>
