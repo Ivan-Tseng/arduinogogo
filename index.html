@@ -16,8 +16,8 @@
   <button id="continueButton" disabled>Continue</button>
   <button id="endButton" disabled>End</button>
   <button id="saveButton" disabled>Save to CSV</button>
-  <button id="motorForwardButton">Motor Forward for 1 second</button>
-  <button id="motorReverseButton">Motor Reverse for 1 second</button>
+  <button id="motorForwardButton">Motor Forward</button>
+  <button id="motorReverseButton">Motor Reverse</button>
   <canvas id="emgChart" width="400" height="200"></canvas>
   <div id="dataDisplay">Waiting for data...</div>
 
@@ -34,6 +34,7 @@
     const maxDataPoints = 125; // 即時圖表中的最大數據點
     let receivingData = true; // 控制是否正在接收數據
     let motorControlEnabled = false; // 控制馬達操作的標誌
+    let motorTimeout; // 用於停止馬達的計時器
 
     // 連接到ESP32並初始化即時圖表
     async function connectToESP32() {
@@ -54,6 +55,7 @@
         document.getElementById('dataDisplay').innerText = "Connected! Waiting for data...";
         document.getElementById('saveButton').disabled = false;
         document.getElementById('stopButton').disabled = false;
+        document.getElementById('continueButton').disabled = false;
         document.getElementById('endButton').disabled = false;
 
         initializeLiveChart(); // 初始化即時圖表
@@ -179,27 +181,37 @@
       liveChart.update();
     }
 
-    // 控制馬達正轉1秒鐘
+    // 控制馬達正轉
     async function motorForward() {
       if (!motorControlEnabled) return;
 
-      console.log("Motor Forward for 1 second");
+      console.log("Motor Forward");
       await characteristicMotor.writeValue(new TextEncoder().encode("forward"));
-      setTimeout(() => {
+      // 如果有計時器在運行，先清除它
+      if (motorTimeout) {
+        clearTimeout(motorTimeout);
+      }
+      // 設定1秒後停止馬達
+      motorTimeout = setTimeout(async () => {
         console.log("Motor Stopped");
-        characteristicMotor.writeValue(new TextEncoder().encode("stop"));
+        await characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
     }
 
-    // 控制馬達反轉1秒鐘
+    // 控制馬達反轉
     async function motorReverse() {
       if (!motorControlEnabled) return;
 
-      console.log("Motor Reverse for 1 second");
+      console.log("Motor Reverse");
       await characteristicMotor.writeValue(new TextEncoder().encode("backward"));
-      setTimeout(() => {
+      // 如果有計時器在運行，先清除它
+      if (motorTimeout) {
+        clearTimeout(motorTimeout);
+      }
+      // 設定1秒後停止馬達
+      motorTimeout = setTimeout(async () => {
         console.log("Motor Stopped");
-        characteristicMotor.writeValue(new TextEncoder().encode("stop"));
+        await characteristicMotor.writeValue(new TextEncoder().encode("stop"));
       }, 1000);
     }
 
