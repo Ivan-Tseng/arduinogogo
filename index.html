@@ -1,15 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EMG Motor Control with Time Axis</title>
+    <title>EMG Motor Control</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
 <body>
-    <h1>EMG Motor Control with Time Axis</h1>
+    <h1>EMG Motor Control</h1>
 
     <button id="connectBtn">Connect</button>
     <button id="forwardBtn" disabled>Forward</button>
@@ -21,7 +19,7 @@
     <script>
         let emgCharacteristic, motorCharacteristic;
         let emgChart;
-        const dataPoints = 125; // Reduced for better performance
+        const dataPoints = 100;
 
         async function connect() {
             const device = await navigator.bluetooth.requestDevice({
@@ -57,66 +55,70 @@
             emgChart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: [],
+                    labels: Array(dataPoints).fill(''),
                     datasets: [{
                         label: 'EMG Value',
-                        data: [],
-                        borderColor: '#4CAF50',
-                        fill: false // Added to prevent filling the area under the line
+                        data: Array(dataPoints).fill(0),
+                        borderColor: '#4CAF50'
                     }]
                 },
                 options: {
-                    animation: false, // Significantly improves performance
-                    scales: {
-                        x: {
-                            type: 'realtime', // Use the realtime scale
-                            realtime: {
-                                delay: 20, // Data comes in every 20 ms
-                                refresh: 1000,  // Update chart every 1000 ms
-                                pause: false,
-                                ttl: 60000 // Remove data after 60 seconds
-                            },
-                            title: {
-                                display: true,
-                                text: 'Time (Realtime)'
-                            }
-                        },
-                        y: {
-                            min: 0,
-                            max: 4095,
-                            title: {
-                                display: true,
-                                text: 'EMG Value'
-                            }
-                        }
-                    },
-                    plugins: {
-                        streaming: false // disable the default streaming plugin, if present
-                    }
+                    animation: false,
+                    scales: { y: { min: 0, max: 4095 } }
                 }
             });
         }
 
         function updateChart(value) {
             emgChart.data.datasets[0].data.push(value);
-            emgChart.data.labels.push(new Date()); // Add a timestamp
             if (emgChart.data.datasets[0].data.length > dataPoints) {
                 emgChart.data.datasets[0].data.shift();
-                emgChart.data.labels.shift();
             }
-            emgChart.update('quiet'); // Use 'quiet' to reduce animation and updates
+            emgChart.update();
         }
 
-        async function sendCommand(cmd) {
-            const encoder = new TextEncoder();
-            await motorCharacteristic.writeValue(encoder.encode(cmd));
+       async function sendCommand(cmd) {
+          const encoder = new TextEncoder();
+          await motorCharacteristic.writeValue(encoder.encode(cmd));
         }
+        
+        async function motorActionWithPause(action) {
+            // Start motor for 1 second
+            await sendCommand(action);
+            await delay(1000); // Delay for 1 second
+            await sendCommand('stop'); // Stop motor
+
+            // Motor stops for 1 second
+            await delay(1000);
+        }
+
+         function delay(ms) {
+            return new Promise(res => setTimeout(res, ms));
+        }
+
 
         document.getElementById('connectBtn').addEventListener('click', connect);
-        document.getElementById('forwardBtn').addEventListener('click', () => sendCommand('forward'));
-        document.getElementById('backwardBtn').addEventListener('click', () => sendCommand('backward'));
-        document.getElementById('stopBtn').addEventListener('click', () => sendCommand('stop'));
-    </script>
-</body>
+        document.getElementById('forwardBtn').addEventListener('click', async () => {
+            await sendCommand('stop'); // Ensure the motor is stopped before proceeding
 
+            await sendCommand('forward');
+           
+            setTimeout(async () => {
+                await sendCommand('stop');
+            }, 1000);
+        });
+
+       document.getElementById('backwardBtn').addEventListener('click', async () => {
+            await sendCommand('stop');
+            await sendCommand('backward');
+            
+            setTimeout(async () => {
+                await sendCommand('stop');
+            }, 1000);
+        });
+
+
+         document.getElementById('stopBtn').addEventListener('click', () => sendCommand('stop'));
+   </script>
+</body>
 </html>
