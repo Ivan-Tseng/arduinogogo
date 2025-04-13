@@ -1,17 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EMG Motor Control</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <h1>EMG Motor Control</h1>
-    
+
     <button id="connectBtn">Connect</button>
     <button id="forwardBtn" disabled>Forward</button>
     <button id="backwardBtn" disabled>Backward</button>
     <button id="stopBtn" disabled>Stop</button>
-    
+
     <canvas id="emgChart" width="800" height="200"></canvas>
 
     <script>
@@ -23,23 +25,23 @@
             const device = await navigator.bluetooth.requestDevice({
                 filters: [{ services: ['4fafc201-1fb5-459e-8fcc-c5c9c331914b'] }]
             });
-            
+
             const server = await device.gatt.connect();
             const service = await server.getPrimaryService('4fafc201-1fb5-459e-8fcc-c5c9c331914b');
-            
+
             // EMG 特徵值
             emgCharacteristic = await service.getCharacteristic('beb5483e-36e1-4688-b7f5-ea07361b26a8');
             await emgCharacteristic.startNotifications();
-            
+
             // 馬達控制特徵值
             motorCharacteristic = await service.getCharacteristic('c0de1234-5678-9101-1121-314151617181');
 
             // 初始化圖表
             initChart();
-            
+
             // 啟用按鈕
             document.querySelectorAll('button:not(#connectBtn)').forEach(b => b.disabled = false);
-            
+
             // EMG 數據處理
             emgCharacteristic.addEventListener('characteristicvaluechanged', event => {
                 const raw = new Uint8Array(event.target.value.buffer);
@@ -60,7 +62,7 @@
                         borderColor: '#4CAF50'
                     }]
                 },
-                options: { 
+                options: {
                     animation: false,
                     scales: { y: { min: 0, max: 4095 } }
                 }
@@ -75,16 +77,48 @@
             emgChart.update();
         }
 
-        async function sendCommand(cmd) {
-            const encoder = new TextEncoder();
-            await motorCharacteristic.writeValue(encoder.encode(cmd));
+       async function sendCommand(cmd) {
+          const encoder = new TextEncoder();
+          await motorCharacteristic.writeValue(encoder.encode(cmd));
+        }
+        
+        async function motorActionWithPause(action) {
+            // Start motor for 1 second
+            await sendCommand(action);
+            await delay(1000); // Delay for 1 second
+            await sendCommand('stop'); // Stop motor
+
+            // Motor stops for 1 second
+            await delay(1000);
         }
 
-        // 事件綁定
+         function delay(ms) {
+            return new Promise(res => setTimeout(res, ms));
+        }
+
+
         document.getElementById('connectBtn').addEventListener('click', connect);
-        document.getElementById('forwardBtn').addEventListener('click', () => sendCommand('forward'));
-        document.getElementById('backwardBtn').addEventListener('click', () => sendCommand('backward')); 
-        document.getElementById('stopBtn').addEventListener('click', () => sendCommand('stop'));
-    </script>
+        document.getElementById('forwardBtn').addEventListener('click', async () => {
+            await sendCommand('stop'); // Ensure the motor is stopped before proceeding
+
+            await sendCommand('forward');
+           
+            setTimeout(async () => {
+                await sendCommand('stop');
+            }, 1000);
+        });
+
+       document.getElementById('backwardBtn').addEventListener('click', async () => {
+            await sendCommand('stop');
+            await sendCommand('backward');
+            
+            setTimeout(async () => {
+                await sendCommand('stop');
+            }, 1000);
+        });
+
+
+         document.getElementById('stopBtn').addEventListener('click', () => sendCommand('stop'));
+   </script>
 </body>
 </html>
